@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import json
 from pathlib import Path
 
@@ -21,78 +22,66 @@ data = load_data()
 
 # ── Session State Logic ────────────────────────────────────────────────────────
 def get_state(tab_id):
-    """كل تبويب يأخذ ذاكرته الخاصة لتتبع المسار"""
     if tab_id not in st.session_state:
         st.session_state[tab_id] = {"queue": [], "counter": 0}
     return st.session_state[tab_id]
 
-# ── Interactive Tree Engine (The Core Logic) ───────────────────────────────────
+# ── Interactive Tree Engine ────────────────────────────────────────────────────
 
 def process_branch(branches, state):
-    """التحكم في نقاط التفرع والأزرار"""
     valid_ids = [b.get("id") for b in branches]
     
-    # هل يوجد قرار سابق في تاريخ المستخدم يطابق أحد هذه التفرعات؟
     for q_id in state["queue"]:
         if q_id in valid_ids:
             chosen = next((b for b in branches if b.get("id") == q_id), None)
             if chosen:
                 return render_node(chosen, state)
     
-    # لم يتم العثور على قرار -> نتوقف ونعرض الأزرار
     st.markdown("---")
     st.subheader("⚕️ Clinical Assessment Required - Make a Choice")
+    
+    # علامة مرجعية لنزول الصفحة عليها بعد الكبس
+    st.markdown('<div id="latest-step"></div>', unsafe_allow_html=True)
     
     cols = st.columns(len(branches))
     clicked = False
     
     for i, b in enumerate(branches):
         cond = b.get("condition", "Choose option")
-        # لون أخضر للنتائج الجيدة، ولون رمادي عادي للنتائج السيئة
         btn_type = "primary" if "✅" in cond or "improved" in cond.lower() else "secondary"
         
         with cols[i]:
             if st.button(cond, key=f"btn_{b.get('id', i)}_{state['counter']}", use_container_width=True, type=btn_type):
-                # إضافة الاختيار لتاريخ المشي
                 state["queue"].append(b["id"])
+                # تفعيل أمر النزول التلقائي
+                st.session_state["scroll_to_bottom"] = True 
                 clicked = True
                 
     if clicked:
         st.rerun()
         
-    return False # إشارة التوقف عن طباعة باقي الشجرة
-
+    return False
 
 def render_node(node, state):
-    """المشي داخل الشجرة وطباعة الخطوات بالتسلسل"""
-    
-    # 1. الوصول للنتيجة النهائية (Baby Care)
     if node.get("outcome") == "routine_care":
         st.success(f"✅ OUTCOME: {node.get('outcome_label', 'Baby Care (Routine)')}")
         return True
 
-    # 2. الملاحظات
     if "note" in node:
         st.warning(f"↩️ NOTE: {node['note']}")
         return True
 
-    # 3. طباعة التقييم / الحالة (Finding/Condition)
     if "condition" in node:
         cond = node["condition"]
-        if "✅" in cond: 
-            st.success(f"🔀 FINDING: {cond}")
-        elif "No_" in cond or "< 60" in cond: 
-            st.error(f"🔀 FINDING: {cond}")
-        else: 
-            st.warning(f"🔀 FINDING: {cond}")
+        if "✅" in cond: st.success(f"🔀 FINDING: {cond}")
+        elif "No_" in cond or "< 60" in cond: st.error(f"🔀 FINDING: {cond}")
+        else: st.warning(f"🔀 FINDING: {cond}")
         st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
 
-    # 4. طباعة عنوان القرار قبل الأزرار (مثل: Apnoea or Gasping?)
     if node.get("type") == "decision" and "label" in node:
         st.markdown(f"### 🔀 {node.get('label', '').upper()}")
         st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
 
-    # 5. طباعة الإجراءات (Actions)
     if "action" in node:
         state["counter"] += 1
         with st.container():
@@ -102,21 +91,18 @@ def render_node(node, state):
                 if line.strip(): st.markdown(f"- {line.strip()}")
         st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
 
-    # 6. طباعة التشخيصات التفريقية (Considerations)
     if "considerations" in node:
         with st.expander("🔍 CONSIDER / EXCLUDE"):
             for c in node["considerations"]:
                 st.markdown(f"- ⚠️ {c}")
         st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
 
-    # 7. المشي داخل مصفوفة الخطوات (Steps Array)
     if "steps" in node:
         for step in node["steps"]:
             if not render_node(step, state): 
-                return False # توقف إذا واجهنا فرع ينتظر الكبس
+                return False
         return True
 
-    # 8. المشي داخل العقدة التالية (Next - Reassessment)
     if "next" in node:
         nxt = node["next"]
         st.markdown(f"### 🔄 {nxt.get('label', '').upper()}")
@@ -125,15 +111,12 @@ def render_node(node, state):
         if "branches" in nxt:
             return process_branch(nxt["branches"], state)
 
-    # 9. معالجة التفرعات المباشرة
     if "branches" in node:
         return process_branch(node["branches"], state)
 
     return True
 
-
 def render_pathway(pathway, state):
-    """واجهة عرض المسار الطبي"""
     st.header(f"{'🟠' if pathway['color']=='orange' else '🔵'} {pathway['label']}")
     st.caption(f"Gestational age: **{pathway['gestational_age']}**")
     
@@ -145,9 +128,7 @@ def render_pathway(pathway, state):
     st.caption("Start the clock at birth")
     st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
     
-    # بدء المشي داخل الشجرة
     render_node(pathway["assessment"], state)
-
 
 # ── Main Application UI ───────────────────────────────────────────────────────
 
@@ -170,11 +151,9 @@ with st.sidebar:
     for v in data["target_spo2"]["values"]:
         st.markdown(f"**{v['time']}**: {v['range']}")
 
-# Page Header
 st.title("Neonatal Life Support — Interactive Guideline")
 st.markdown("Interactive decision-tree guideline for neonatal resuscitation at birth")
 
-# Quick Reference Strip
 col1, col2, col3, col4 = st.columns(4)
 with col1: st.metric("Start clock", "At birth")
 with col2: st.metric("Good HR", "> 100 bpm")
@@ -183,7 +162,6 @@ with col4: st.metric("Epinephrine", "0.01–0.03 mg/kg")
 
 st.markdown("---")
 
-# Render Tabs based on selection
 pathways_to_show = [p for p in data["pathways"] if selected_ga == "Both Pathways" or p["label"] == selected_ga]
 
 if len(pathways_to_show) == 2:
@@ -192,3 +170,18 @@ if len(pathways_to_show) == 2:
     with tab2: render_pathway(data["pathways"][1], get_state("tab2"))
 else:
     render_pathway(pathways_to_show[0], get_state("single"))
+
+# ── الكود السحري لحل مشكلة تصعد الصفحة للأعلى ──────────────────────────────
+if st.session_state.get("scroll_to_bottom", False):
+    st.session_state["scroll_to_bottom"] = False
+    # استخدام JavaScript لفرض الصفحة على النزول لآخر عنصر
+    components.html("""
+        <script>
+            const mainElement = window.parent.document.querySelector('[data-testid="stMain"]');
+            if(mainElement) {
+                setTimeout(() => {
+                    mainElement.scrollTo({ top: mainElement.scrollHeight, behavior: 'smooth' });
+                }, 100);
+            }
+        </script>
+    """, height=0, width=0)

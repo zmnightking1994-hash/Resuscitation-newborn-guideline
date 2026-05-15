@@ -1,6 +1,6 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import json
-import html
 
 # --- Page Configuration ---
 st.set_page_config(
@@ -28,7 +28,7 @@ st.markdown("""
     .legend-container {
         display: flex;
         justify-content: center;
-        gap: 20px;
+        gap: 25px;
         margin-bottom: 30px;
         flex-wrap: wrap;
     }
@@ -40,8 +40,8 @@ st.markdown("""
         color: #333;
     }
     .legend-box {
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
         border-radius: 4px;
         margin-right: 8px;
         border: 2px solid #ccc;
@@ -63,6 +63,14 @@ st.markdown("""
         margin-top: 40px;
         margin-bottom: 20px;
         display: inline-block;
+    }
+    .flowchart-container {
+        background-color: #ffffff;
+        border: 1px solid #eaeaea;
+        border-radius: 10px;
+        padding: 20px;
+        margin-bottom: 30px;
+        overflow-x: auto;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -120,8 +128,8 @@ if data:
 
     # --- Helper: Text Sanitizer for Mermaid ---
     def sanitize_mermaid(text):
-        # Mermaid breaks with special characters, wrap in quotes and escape
-        text = str(text).replace('"', "'").replace('_', ' ').replace(' cm h2o', ' cmH₂O').replace(' o2', ' O₂')
+        text = str(text).replace('"', "'").replace('_', ' ').replace(' cm h2o', ' cmH2O').replace(' o2', ' O2')
+        # Wrap in quotes to handle special characters safely in Mermaid
         return f'"{text}"'
 
     # --- Helper: Generate Branch Title ---
@@ -135,8 +143,7 @@ if data:
         if not title_parts: return f"Branch {index + 1}"
         return f"Branch {index + 1}: " + " ➡️ ".join(title_parts)
 
-    # --- Extract and Display SpO2 Targets (Global for GA) ---
-    # Assuming SpO2 is consistent across paths for the same GA, we take the first occurrence
+    # --- Extract and Display SpO2 Targets ---
     spo2_target = next((step["target_spo2_Right_hand"] for path in ga_groups[selected_ga] for step in path if "target_spo2_Right_hand" in step), None)
     
     if spo2_target:
@@ -160,26 +167,16 @@ if data:
         st.markdown(f'<div class="branch-title">{branch_title}</div>', unsafe_allow_html=True)
         
         mermaid_code = "graph TD\n"
-        # Define Styles in Mermaid
-        mermaid_code += """
-            classDef assess fill:#e6f7ff,stroke:#1890ff,stroke-width:2px,color:#000
-            classDef action fill:#fff9e6,stroke:#ffb800,stroke-width:2px,color:#000
-            classDef critical fill:#fff1f0,stroke:#f5222d,stroke-width:2px,color:#000
-            classDef success fill:#f6ffed,stroke:#52c41a,stroke-width:2px,color:#000
-        """
         
         nodes = []
         prev_node_id = None
         node_counter = 0
-        
-        # Generate a unique ID for this branch's nodes (e.g., A1, A2 for Branch 0; B1, B2 for Branch 1)
         branch_letter = chr(65 + i) 
         
         for step in path:
             for key, value in step.items():
                 if key in ignore_keys or key == "Birth":
                     if key == "Birth":
-                        # Create Start Node
                         start_id = f"{branch_letter}{node_counter}"
                         mermaid_code += f"{start_id}[{sanitize_mermaid(value)}]\n"
                         nodes.append(start_id)
@@ -190,9 +187,8 @@ if data:
                 curr_node_id = f"{branch_letter}{node_counter}"
                 node_text = sanitize_mermaid(f"{key.replace('_', ' ')}: {value}")
                 
-                # Determine Node Shape and Class based on Key
+                # Determine Node Shape
                 if key in ["Breathing", "heart_rate", "Normal_chest_movements", "No_chest_movements", "apnoea_or_gasping", "No_apnoea_or_gasping", "Case", "Chest movements assessment"]:
-                    # Diamond for assessment
                     mermaid_code += f"{curr_node_id}{{{node_text}}}\n"
                     if "No_chest" in key or "No_apnoea" in key.lower() or key == "Case":
                         mermaid_code += f"class {curr_node_id} critical;\n"
@@ -200,24 +196,21 @@ if data:
                         mermaid_code += f"class {curr_node_id} assess;\n"
                         
                 elif key.startswith("Action") or key == "consideration":
-                    # Rectangle for actions
                     mermaid_code += f"{curr_node_id}[{node_text}]\n"
                     mermaid_code += f"class {curr_node_id} action;\n"
                     
                 elif key in ["improvment", "Improvement"]:
-                    # Stadium (Rounded) for success
                     mermaid_code += f"{curr_node_id}([{node_text}])\n"
                     mermaid_code += f"class {curr_node_id} success;\n"
                     
                 elif key == "No_improvment":
-                    # Diamond for critical failure
                     mermaid_code += f"{curr_node_id}{{{node_text}}}\n"
                     mermaid_code += f"class {curr_node_id} critical;\n"
                 else:
                     mermaid_code += f"{curr_node_id}[{node_text}]\n"
                     mermaid_code += f"class {curr_node_id} action;\n"
 
-                # Draw Edge from previous node
+                # Draw Connection
                 if prev_node_id:
                     mermaid_code += f"{prev_node_id} --> {curr_node_id}\n"
                 
@@ -225,8 +218,47 @@ if data:
                 prev_node_id = curr_node_id
                 node_counter += 1
 
-        # Render the Mermaid Chart in Streamlit
-        st.markdown(mermaid_code)
+        # Add Mermaid Styling Definitions
+        class_defs = """
+            classDef assess fill:#e6f7ff,stroke:#1890ff,stroke-width:2px,color:#000
+            classDef action fill:#fff9e6,stroke:#ffb800,stroke-width:2px,color:#000
+            classDef critical fill:#fff1f0,stroke:#f5222d,stroke-width:2px,color:#000
+            classDef success fill:#f6ffed,stroke:#52c41a,stroke-width:2px,color:#000
+        """
+        mermaid_code += class_defs
+
+        # HTML Template to render Mermaid properly inside Streamlit
+        html_template = f"""
+        <div class="flowchart-container">
+            <div class="mermaid">
+            {mermaid_code}
+            </div>
+        </div>
+        <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+        <script>
+            mermaid.initialize({{
+                startOnLoad: true,
+                theme: 'base',
+                themeVariables: {{
+                    primaryColor: '#e6f7ff',
+                    primaryTextColor: '#000',
+                    primaryBorderColor: '#1890ff',
+                    lineColor: '#666',
+                    secondaryColor: '#fff9e6',
+                    tertiaryColor: '#f6ffed'
+                }},
+                flowchart: {{
+                    useMaxWidth: true,
+                    htmlLabels: true,
+                    curve: 'basis'
+                }}
+            }});
+        </script>
+        """
+        
+        # Calculate dynamic height based on number of nodes (roughly 100px per node)
+        components.html(html_template, height=max(350, node_counter * 100))
+        
         st.divider()
 
     # Footer

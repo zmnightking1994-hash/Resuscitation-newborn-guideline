@@ -9,7 +9,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- Custom CSS ---
+# --- Custom CSS for Professional Medical UI ---
 st.markdown("""
 <style>
     .main-header {
@@ -31,7 +31,7 @@ st.markdown("""
         margin-bottom: 15px;
         border-radius: 5px;
         box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-        animation: fadeIn 0.4s ease-in-out;
+        animation: fadeIn 0.3s ease-in-out;
     }
     .action-card { background-color: #fff9e6; border-left-color: #ffb800; }
     .assessment-card { background-color: #e6f7ff; border-left-color: #1890ff; }
@@ -60,43 +60,25 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Data Normalizer (Fixes only the Breathing/HR order discrepancy without deleting data) ---
-def normalize_path(path):
-    meta = []
-    core = []
-    for s in path:
-        if "Gestational_age" in s or "target_spo2" in s:
-            meta.append(s)
-        else:
-            core.append(s)
-
-    # Find indices to fix the specific swap issue in your JSON
-    breath_idx = next((i for i, s in enumerate(core) if "Breathing" in s), None)
-    hr_idx = next((i for i, s in enumerate(core) if "heart_rate" in s), None)
-
-    # If heart_rate comes right before Breathing, swap them so paths align perfectly
-    if breath_idx is not None and hr_idx is not None and hr_idx == breath_idx - 1:
-        core[hr_idx], core[breath_idx] = core[breath_idx], core[hr_idx]
-
-    return meta + core
-
 # --- Load Data ---
 @st.cache_data
 def load_data():
     try:
         with open("app.json", "r", encoding="utf-8") as f:
             return json.load(f)
-    except: return None
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return None
 
 data = load_data()
 
 if data:
-    # Group and Normalize
+    # --- Data Grouping (No normalization needed anymore!) ---
     ga_groups = {"<32_weeks": [], ">32_weeks": []}
     for path in data:
         ga = path[0].get("Gestational_age", "Unknown")
         if ga in ga_groups:
-            ga_groups[ga].append(normalize_path(path))
+            ga_groups[ga].append(path)
 
     # --- UI Header ---
     st.markdown("""
@@ -116,20 +98,21 @@ if data:
             format_func=lambda x: "≥ 32 Weeks" if x == ">32_weeks" else "< 32 Weeks",
             index=0
         )
+        st.divider()
         if st.button("🔄 Reset Algorithm", use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
-    # --- Initialize Session State for Wizard ---
+    # --- Initialize Session State ---
     if "active_paths" not in st.session_state or st.session_state.get("current_ga") != selected_ga:
         st.session_state.current_ga = selected_ga
         st.session_state.active_paths = ga_groups[selected_ga]
         st.session_state.depth = 0
         
-    # --- Extract Global SpO2 ---
+    # --- Extract SpO2 ---
     spo2_target = next((step["target_spo2_Right_hand"] for path in ga_groups[selected_ga] for step in path if "target_spo2_Right_hand" in step), None)
 
-    # --- Helper to render a single step card ---
+    # --- Helper to render step UI ---
     def render_step(step):
         key, value = list(step.items())[0]
         if key in ["Gestational_age", "target_spo2_Right_hand"]: return
@@ -160,20 +143,25 @@ if data:
     active = st.session_state.active_paths
     depth = st.session_state.depth
 
-    # 1. Display the common steps up to the current depth
+    # 1. Render all steps before the current depth
     for i in range(depth):
         if i < len(active[0]):
             render_step(active[0][i])
 
-    # 2. Check for divergence (Branching point)
+    # 2. Evaluate current step for branching
     valid_paths = [p for p in active if depth < len(p)]
     
     if valid_paths:
         current_steps = [p[depth] for p in valid_paths]
-        unique_steps = set(tuple(sorted(s.items())) for s in current_steps)
+        unique_steps = list(set(tuple(sorted(s.items())) for s in current_steps))
         
-        # If there's more than 1 unique step, it's a BRANCH!
-        if len(unique_steps) > 1:
+        # LOGIC A: Auto-advance if steps are identical (No user choice needed)
+        if len(unique_steps) == 1:
+            st.session_state.depth += 1
+            st.rerun()
+            
+        # LOGIC B: Stop and show branching buttons
+        elif len(unique_steps) > 1:
             st.markdown("""
             <div class="branch-container">
                 <div class="branch-title">⚕️ Clinical Assessment Required</div>
@@ -186,18 +174,20 @@ if data:
                 btn_text = str(value).replace('_', ' ').replace(' cm h2o', ' cmH₂O').replace(' o2', ' O₂')
                 
                 with cols[i]:
+                    # Determine button color
                     btn_type = "primary"
                     if "No_" in key or "No_" in value: btn_type = "secondary"
-                    if "Normal" in key or "increase" in value or "improvment" in value.lower() or "baby care" in value.lower(): btn_type = "primary"
+                    if "Normal" in key or "increase" in value or "improvment" in value.lower() or "spontaneous" in value.lower(): btn_type = "primary"
                     
                     if st.button(btn_text, key=f"btn_{depth}_{i}", use_container_width=True, type=btn_type):
+                        # Filter paths based on user choice
                         st.session_state.active_paths = [p for p in valid_paths if tuple(sorted(p[depth].items())) == step_tuple]
                         st.session_state.depth += 1
                         st.rerun()
             
             st.markdown("</div>", unsafe_allow_html=True)
 
-    # 3. If no divergence, check if we reached the end
+    # 3. End of Pathway
     else:
         st.markdown("""
         <div class="step-card success-card" style="margin-top: 30px; text-align: center;">
@@ -217,6 +207,5 @@ if data:
                     st.metric(label=f"⏱️ {time}", value=target)
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # Footer
     st.divider()
-    st.caption("Disclaimer: This tool is for educational purposes only. Follow your institutional protocols.")
+    st.caption("Disclaimer: This tool is for educational purposes only. Always follow your institutional protocols.")

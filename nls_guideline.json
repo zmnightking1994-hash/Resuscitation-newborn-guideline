@@ -1,0 +1,316 @@
+{
+  "title": "Neonatal Life Support (NLS) Guideline",
+  "version": "1.0",
+  "target_spo2": {
+    "label": "Target SpO₂ (Right Hand)",
+    "values": [
+      { "time": "1 min",  "range": "60–65%" },
+      { "time": "2 min",  "range": "65–70%" },
+      { "time": "3 min",  "range": "70–75%" },
+      { "time": "4 min",  "range": "75–80%" },
+      { "time": "5 min",  "range": "80–85%" },
+      { "time": "10 min", "range": "85–95%" }
+    ]
+  },
+  "pathways": [
+    {
+      "id": "GA_gt32",
+      "gestational_age": ">32 weeks",
+      "label": "Term / Near-Term (≥32 weeks)",
+      "color": "blue",
+      "initial_actions": [
+        "Delayed cord clamping (DCC)",
+        "Gentle stimulation",
+        "Dry, wrap, hat — keep warm"
+      ],
+      "assessment": {
+        "label": "Assess at Birth",
+        "branches": [
+          {
+            "id": "gt32_good",
+            "condition": "Spontaneous breathing + HR > 100 bpm",
+            "icon": "✅",
+            "outcome": "routine_care",
+            "outcome_label": "Baby Care (Routine)"
+          },
+          {
+            "id": "gt32_inadequate",
+            "condition": "Inadequate breathing",
+            "icon": "⚠️",
+            "steps": [
+              {
+                "id": "gt32_s1",
+                "action": "Open Airway",
+                "type": "action"
+              },
+              {
+                "id": "gt32_s2",
+                "label": "Apnoea or Gasping?",
+                "type": "decision",
+                "branches": [
+                  {
+                    "id": "gt32_s2_yes",
+                    "condition": "Yes — Apnoea / Gasping",
+                    "action": "Give 5 inflations: 30 cmH₂O / PEEP 6 cmH₂O / FiO₂ 21%",
+                    "next": {
+                      "id": "gt32_reassess1",
+                      "label": "Reassess after 5 inflations",
+                      "type": "reassessment",
+                      "branches": [
+                        {
+                          "id": "gt32_r1_improved",
+                          "condition": "HR increased ✅",
+                          "outcome": "routine_care",
+                          "outcome_label": "Baby Care (Routine)"
+                        },
+                        {
+                          "id": "gt32_r1_no_improve",
+                          "condition": "No increase in HR",
+                          "next": {
+                            "id": "gt32_chest_assess",
+                            "label": "Chest Movement Assessment",
+                            "type": "decision",
+                            "branches": [
+                              {
+                                "id": "gt32_chest_normal",
+                                "condition": "Normal chest movements",
+                                "action": "Continue PPV: 30 cmH₂O / PEEP 6 cmH₂O",
+                                "next": {
+                                  "id": "gt32_reassess2",
+                                  "label": "Reassess after 30 sec",
+                                  "type": "reassessment",
+                                  "branches": [
+                                    {
+                                      "id": "gt32_r2_improved",
+                                      "condition": "Improved ✅",
+                                      "outcome": "routine_care",
+                                      "outcome_label": "Baby Care (Routine)"
+                                    },
+                                    {
+                                      "id": "gt32_r2_no_improve",
+                                      "condition": "HR remains < 60 bpm",
+                                      "action": "Start chest compressions: 3 compressions : 1 ventilation / 100% O₂ / Consider SGA or tracheal tube",
+                                      "next": {
+                                        "id": "gt32_reassess3",
+                                        "label": "Reassess after 30 sec",
+                                        "type": "reassessment",
+                                        "branches": [
+                                          {
+                                            "id": "gt32_r3_improved",
+                                            "condition": "Improved ✅",
+                                            "outcome": "routine_care",
+                                            "outcome_label": "Baby Care (Routine)"
+                                          },
+                                          {
+                                            "id": "gt32_r3_no_improve",
+                                            "condition": "HR remains < 60 bpm",
+                                            "action": "Vascular access (UVC/IO)\nEpinephrine 0.01–0.03 mg/kg IV/IO every 3–5 min\nVolume expansion if blood loss suspected: 10 ml/kg\nGlucose 10% 2 ml/kg if hypoglycaemia suspected",
+                                            "considerations": [
+                                              "Pneumothorax",
+                                              "Hypovolaemia",
+                                              "Hypoglycaemia",
+                                              "Hypothermia",
+                                              "Metabolic acidosis",
+                                              "Congenital heart disease",
+                                              "Congenital abnormalities"
+                                            ],
+                                            "next": {
+                                              "id": "gt32_reassess4",
+                                              "label": "Reassess after 30 sec",
+                                              "type": "reassessment"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "gt32_no_chest",
+                                "condition": "No chest movements",
+                                "action": "Check mask / head position / jaw thrust\nTry other airway opening techniques\nIncrease pressure to 40 cmH₂O",
+                                "next": {
+                                  "id": "gt32_repeat_inflations",
+                                  "label": "Repeat 5 inflations → Reassess after 5 inflations",
+                                  "type": "reassessment",
+                                  "branches": [
+                                    {
+                                      "id": "gt32_ri_improved",
+                                      "condition": "HR increased ✅",
+                                      "outcome": "routine_care",
+                                      "outcome_label": "Baby Care (Routine)"
+                                    },
+                                    {
+                                      "id": "gt32_ri_no_improve",
+                                      "condition": "Still no increase in HR",
+                                      "note": "→ Continue as per chest movement assessment above"
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "GA_lt32",
+      "gestational_age": "<32 weeks",
+      "label": "Preterm (< 32 weeks)",
+      "color": "orange",
+      "initial_actions": [
+        "Place undried body into plastic bag or wrap",
+        "Dry, wrap, hat — keep warm",
+        "Use external heat source if needed"
+      ],
+      "assessment": {
+        "label": "Assess at Birth",
+        "branches": [
+          {
+            "id": "lt32_good",
+            "condition": "Spontaneous breathing + HR > 100 bpm",
+            "icon": "✅",
+            "action": "PPV: PEEP 6 cmH₂O / FiO₂ ≥30%",
+            "outcome": "routine_care",
+            "outcome_label": "Baby Care (Routine)"
+          },
+          {
+            "id": "lt32_inadequate",
+            "condition": "Inadequate breathing",
+            "icon": "⚠️",
+            "steps": [
+              {
+                "id": "lt32_s1",
+                "action": "Open Airway",
+                "type": "action"
+              },
+              {
+                "id": "lt32_s2",
+                "label": "Apnoea or Gasping?",
+                "type": "decision",
+                "branches": [
+                  {
+                    "id": "lt32_s2_yes",
+                    "condition": "Yes — Apnoea / Gasping",
+                    "action": "Give 5 inflations: 25 cmH₂O / FiO₂ ≥30%",
+                    "next": {
+                      "id": "lt32_reassess1",
+                      "label": "Reassess after 5 inflations",
+                      "type": "reassessment",
+                      "branches": [
+                        {
+                          "id": "lt32_r1_improved",
+                          "condition": "HR increased ✅",
+                          "outcome": "routine_care",
+                          "outcome_label": "Baby Care (Routine)"
+                        },
+                        {
+                          "id": "lt32_r1_no_improve",
+                          "condition": "No increase in HR",
+                          "next": {
+                            "id": "lt32_chest_assess",
+                            "label": "Chest Movement Assessment",
+                            "type": "decision",
+                            "branches": [
+                              {
+                                "id": "lt32_chest_normal",
+                                "condition": "Normal chest movements",
+                                "action": "Continue PPV: 25 cmH₂O / FiO₂ ≥30%",
+                                "next": {
+                                  "id": "lt32_reassess2",
+                                  "label": "Reassess after 30 sec",
+                                  "type": "reassessment",
+                                  "branches": [
+                                    {
+                                      "id": "lt32_r2_improved",
+                                      "condition": "Improved ✅",
+                                      "outcome": "routine_care",
+                                      "outcome_label": "Baby Care (Routine)"
+                                    },
+                                    {
+                                      "id": "lt32_r2_no_improve",
+                                      "condition": "HR remains < 60 bpm",
+                                      "action": "Start chest compressions: 3 compressions : 1 ventilation / 100% O₂ / Consider SGA or tracheal tube",
+                                      "next": {
+                                        "id": "lt32_reassess3",
+                                        "label": "Reassess after 30 sec",
+                                        "type": "reassessment",
+                                        "branches": [
+                                          {
+                                            "id": "lt32_r3_improved",
+                                            "condition": "Improved ✅",
+                                            "outcome": "routine_care",
+                                            "outcome_label": "Baby Care (Routine)"
+                                          },
+                                          {
+                                            "id": "lt32_r3_no_improve",
+                                            "condition": "HR remains < 60 bpm",
+                                            "action": "Vascular access (UVC/IO)\nEpinephrine 0.01–0.03 mg/kg IV/IO every 3–5 min\nVolume expansion if blood loss suspected: 10 ml/kg\nGlucose 10% 2 ml/kg if hypoglycaemia suspected",
+                                            "considerations": [
+                                              "Pneumothorax",
+                                              "Hypovolaemia",
+                                              "Hypoglycaemia",
+                                              "Hypothermia",
+                                              "Metabolic acidosis",
+                                              "Congenital heart disease",
+                                              "Congenital abnormalities"
+                                            ],
+                                            "next": {
+                                              "id": "lt32_reassess4",
+                                              "label": "Reassess after 30 sec",
+                                              "type": "reassessment"
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    }
+                                  ]
+                                }
+                              },
+                              {
+                                "id": "lt32_no_chest",
+                                "condition": "No chest movements",
+                                "action": "Check mask / head position / jaw thrust\nTry other airway opening techniques\nIncrease pressure to 30 cmH₂O",
+                                "next": {
+                                  "id": "lt32_repeat_inflations",
+                                  "label": "Repeat 5 inflations → Reassess after 5 inflations",
+                                  "type": "reassessment",
+                                  "branches": [
+                                    {
+                                      "id": "lt32_ri_improved",
+                                      "condition": "HR increased ✅",
+                                      "outcome": "routine_care",
+                                      "outcome_label": "Baby Care (Routine)"
+                                    },
+                                    {
+                                      "id": "lt32_ri_no_improve",
+                                      "condition": "Still no increase in HR",
+                                      "note": "→ Continue as per chest movement assessment above"
+                                    }
+                                  ]
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

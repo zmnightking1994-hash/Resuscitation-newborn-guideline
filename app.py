@@ -1,187 +1,96 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import json
-from pathlib import Path
 
-# ── Page config ────────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="NLS Interactive Guideline",
-    page_icon="🫁",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# إعداد صفحة التطبيق
+st.set_page_config(page_title="Neonatal Life Support (NLS)", layout="wide", page_icon="👶")
 
-# ── Load data ──────────────────────────────────────────────────────────────────
+# دالة لتحميل البيانات من ملف JSON
 @st.cache_data
 def load_data():
-    p = Path(__file__).parent / "nls_guideline.json"
-    with open(p, encoding="utf-8") as f:
+    # تأكد من أن ملف nls_guideline.json موجود في نفس مسار السكريبت
+    with open('nls_guideline.json', 'r', encoding='utf-8') as f:
         return json.load(f)
 
-data = load_data()
-
-# ── Session State Logic ────────────────────────────────────────────────────────
-def get_state(tab_id):
-    if tab_id not in st.session_state:
-        st.session_state[tab_id] = {"queue": [], "counter": 0}
-    return st.session_state[tab_id]
-
-# ── Interactive Tree Engine ────────────────────────────────────────────────────
-
-def process_branch(branches, state):
-    valid_ids = [b.get("id") for b in branches]
-    
-    for q_id in state["queue"]:
-        if q_id in valid_ids:
-            chosen = next((b for b in branches if b.get("id") == q_id), None)
-            if chosen:
-                return render_node(chosen, state)
-    
-    st.markdown("---")
-    st.subheader("⚕️ Clinical Assessment Required - Make a Choice")
-    
-    # علامة مرجعية لنزول الصفحة عليها بعد الكبس
-    st.markdown('<div id="latest-step"></div>', unsafe_allow_html=True)
-    
-    cols = st.columns(len(branches))
-    clicked = False
-    
-    for i, b in enumerate(branches):
-        cond = b.get("condition", "Choose option")
-        btn_type = "primary" if "✅" in cond or "improved" in cond.lower() else "secondary"
-        
-        with cols[i]:
-            if st.button(cond, key=f"btn_{b.get('id', i)}_{state['counter']}", use_container_width=True, type=btn_type):
-                state["queue"].append(b["id"])
-                # تفعيل أمر النزول التلقائي
-                st.session_state["scroll_to_bottom"] = True 
-                clicked = True
-                
-    if clicked:
-        st.rerun()
-        
-    return False
-
-def render_node(node, state):
-    if node.get("outcome") == "routine_care":
-        st.success(f"✅ OUTCOME: {node.get('outcome_label', 'Baby Care (Routine)')}")
-        return True
-
-    if "note" in node:
-        st.warning(f"↩️ NOTE: {node['note']}")
-        return True
-
-    if "condition" in node:
-        cond = node["condition"]
-        if "✅" in cond: st.success(f"🔀 FINDING: {cond}")
-        elif "No_" in cond or "< 60" in cond: st.error(f"🔀 FINDING: {cond}")
-        else: st.warning(f"🔀 FINDING: {cond}")
-        st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
-
-    if node.get("type") == "decision" and "label" in node:
-        st.markdown(f"### 🔀 {node.get('label', '').upper()}")
-        st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
-
+# دالة عودية (Recursive) لرسم مسار القرارات الطبي بشكل متدفق
+def render_node(node, key_prefix):
+    # عرض الإجراءات المطلوبة إن وجدت
     if "action" in node:
-        state["counter"] += 1
-        with st.container():
-            st.info(f"🛠️ ACTION {state['counter']}")
-            lines = node["action"].split("\n")
-            for line in lines:
-                if line.strip(): st.markdown(f"- {line.strip()}")
-        st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
-
+        st.info(f"⚡ **الإجراء المطلوب (Action):**\n{node['action']}")
+    
+    # عرض الاعتبارات الطبية الإضافية
     if "considerations" in node:
-        with st.expander("🔍 CONSIDER / EXCLUDE"):
-            for c in node["considerations"]:
-                st.markdown(f"- ⚠️ {c}")
-        st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
+        st.warning("**اعتبارات إضافية يجب التفكير بها (Considerations):**\n" + 
+                   "\n".join([f"- {c}" for c in node['considerations']]))
+                   
+    # عرض الملاحظات
+    if "note" in node:
+        st.caption(f"📝 ملاحظة: {node['note']}")
 
-    if "steps" in node:
-        for step in node["steps"]:
-            if not render_node(step, state): 
-                return False
-        return True
-
-    if "next" in node:
-        nxt = node["next"]
-        st.markdown(f"### 🔄 {nxt.get('label', '').upper()}")
-        st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
-        
-        if "branches" in nxt:
-            return process_branch(nxt["branches"], state)
-
+    # إذا كان هناك تفرعات (قرارات يجب اتخاذها)
     if "branches" in node:
-        return process_branch(node["branches"], state)
-
-    return True
-
-def render_pathway(pathway, state):
-    st.header(f"{'🟠' if pathway['color']=='orange' else '🔵'} {pathway['label']}")
-    st.caption(f"Gestational age: **{pathway['gestational_age']}**")
-    
-    with st.expander("⚡ Initial Actions at Birth", expanded=True):
-        for a in pathway["initial_actions"]:
-            st.markdown(f"- ✦ {a}")
-            
-    st.markdown("### 🩺 Assess at Birth")
-    st.caption("Start the clock at birth")
-    st.markdown("<div style='text-align:center; color:gray;'>⬇️</div>", unsafe_allow_html=True)
-    
-    render_node(pathway["assessment"], state)
-
-# ── Main Application UI ───────────────────────────────────────────────────────
-
-with st.sidebar:
-    st.title("🫁 NLS Guideline")
-    st.caption("Neonatal Life Support")
-    st.markdown("---")
-    
-    st.subheader("Filter by Gestational Age")
-    ga_options = ["Both Pathways"] + [p["label"] for p in data["pathways"]]
-    selected_ga = st.selectbox("Select pathway:", ga_options, label_visibility="collapsed")
-    
-    st.markdown("---")
-    if st.button("🔄 Reset Algorithm", use_container_width=True):
-        st.session_state.clear()
-        st.rerun()
+        options = {b.get("condition", "متابعة"): b for b in node["branches"]}
+        # استخدام st.radio كأداة تفاعلية للتدفق
+        choice = st.radio("ما هي حالة الطفل الآن؟", list(options.keys()), key=key_prefix, index=None)
         
-    st.markdown("---")
-    st.subheader("🎯 Target SpO₂ (Right Hand)")
-    for v in data["target_spo2"]["values"]:
-        st.markdown(f"**{v['time']}**: {v['range']}")
+        if choice:
+            selected_branch = options[choice]
+            
+            # عرض النتيجة النهائية إذا وصلنا إليها
+            if "outcome_label" in selected_branch:
+                icon = selected_branch.get('icon', '✅')
+                st.success(f"{icon} **القرار النهائي:** {selected_branch['outcome_label']}")
+            
+            # عرض الإجراء الخاص بالفرع المختار
+            if "action" in selected_branch:
+                st.info(f"⚡ **الإجراء (Action):** {selected_branch['action']}")
+            
+            # إذا كان هناك خطوات متسلسلة داخل هذا الفرع
+            if "steps" in selected_branch:
+                for i, step in enumerate(selected_branch["steps"]):
+                    st.markdown("---")
+                    if "label" in step:
+                        st.subheader(step["label"])
+                    render_node(step, key_prefix + f"_step_{i}")
+                    
+            # إذا كان هناك عقدة تالية (Next) للتقييم
+            if "next" in selected_branch:
+                st.markdown("---")
+                if "label" in selected_branch["next"]:
+                    st.subheader(selected_branch["next"]["label"])
+                render_node(selected_branch["next"], key_prefix + "_next")
 
-st.title("Neonatal Life Support — Interactive Guideline")
-st.markdown("Interactive decision-tree guideline for neonatal resuscitation at birth")
+def main():
+    data = load_data()
+    
+    # العنوان الرئيسي
+    st.title(data["title"])
+    st.caption(f"الإصدار: {data['version']}")
 
-col1, col2, col3, col4 = st.columns(4)
-with col1: st.metric("Start clock", "At birth")
-with col2: st.metric("Good HR", "> 100 bpm")
-with col3: st.metric("CC threshold", "< 60 bpm")
-with col4: st.metric("Epinephrine", "0.01–0.03 mg/kg")
+    # الشريط الجانبي لعرض أهداف الإشباع الأكسجيني
+    with st.sidebar:
+        st.header(data["target_spo2"]["label"])
+        for val in data["target_spo2"]["values"]:
+            st.write(f"- **{val['time']}**: {val['range']}")
 
-st.markdown("---")
+    # 1. فلتر عمر الحمل (Gestational Age)
+    st.header("1. تحديد عمر الحمل (Gestational Age)")
+    pathways = {p["label"]: p for p in data["pathways"]}
+    selected_ga_label = st.radio("اختر الفئة العمرية:", list(pathways.keys()), index=None)
 
-pathways_to_show = [p for p in data["pathways"] if selected_ga == "Both Pathways" or p["label"] == selected_ga]
+    # 2. التدفق المعتمد على عمر الحمل
+    if selected_ga_label:
+        pathway = pathways[selected_ga_label]
+        
+        st.markdown("---")
+        st.subheader("الإجراءات الأولية (Initial Actions)")
+        for action in pathway["initial_actions"]:
+            st.write(f"✅ {action}")
+            
+        st.markdown("---")
+        st.subheader(pathway["assessment"]["label"])
+        
+        # استدعاء الدالة العودية لبدء التقييم
+        render_node(pathway["assessment"], key_prefix="main_assessment")
 
-if len(pathways_to_show) == 2:
-    tab1, tab2 = st.tabs([f"🔵 {data['pathways'][0]['label']}", f"🟠 {data['pathways'][1]['label']}"])
-    with tab1: render_pathway(data["pathways"][0], get_state("tab1"))
-    with tab2: render_pathway(data["pathways"][1], get_state("tab2"))
-else:
-    render_pathway(pathways_to_show[0], get_state("single"))
-
-# ── الكود السحري لحل مشكلة تصعد الصفحة للأعلى ──────────────────────────────
-if st.session_state.get("scroll_to_bottom", False):
-    st.session_state["scroll_to_bottom"] = False
-    # استخدام JavaScript لفرض الصفحة على النزول لآخر عنصر
-    components.html("""
-        <script>
-            const mainElement = window.parent.document.querySelector('[data-testid="stMain"]');
-            if(mainElement) {
-                setTimeout(() => {
-                    mainElement.scrollTo({ top: mainElement.scrollHeight, behavior: 'smooth' });
-                }, 100);
-            }
-        </script>
-    """, height=0, width=0)
+if __name__ == "__main__":
+    main()

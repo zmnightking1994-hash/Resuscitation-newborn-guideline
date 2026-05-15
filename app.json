@@ -3,8 +3,8 @@
         {"Gestational_age": ">32_weeks"},
         {"Birth": "Start the clock at birth"},
         {"Action": "Delayed cord clamping (DCC),Gentle stimulation,Dry_wrap_hat_keep warm"},
-        {"Breathing": "Spontaneous breathing"},
         {"heart_rate": ">100 bpm"},
+        {"Breathing": "Spontaneous breathing"},
         {"Action": "Baby_care"},
         {"target_spo2_Right_hand": "60-65% at 1 min, 65-70% at 2 min, 70-75% at 3 min, 75-80% at 4 min, 80-85% at 5 min, 85-95% at 10 min"}
     ],
@@ -150,8 +150,8 @@
         {"Gestational_age": "<32_weeks"},
         {"Birth": "Start the clock at birth"},
         {"Action": "Place undried body into plastic bag or wrap, Dry_wrap_hat_keep warm, use external heat source if needed"},
-        {"Breathing": "Spontaneous breathing"},
         {"heart_rate": ">100 bpm"},
+        {"Breathing": "Spontaneous breathing"},
         {"No_apnoea_or_gasping": "Positive pressure ventilation (PPV)with 6cm h2o with >=30%"},
         {"Action": "Baby_care"},
         {"target_spo2_Right_hand": "60-65% at 1 min, 65-70% at 2 min, 70-75% at 3 min, 75-80% at 4 min, 80-85% at 5 min, 85-95% at 10 min"}

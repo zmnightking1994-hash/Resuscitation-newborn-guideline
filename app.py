@@ -51,8 +51,6 @@ st.markdown("""
     }
     .branch-title { font-size: 1.3rem; font-weight: 700; color: #003087; margin-bottom: 20px; }
     
-    .btn-container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; }
-    
     .spo2-container {
         background: #ffffff; border: 2px solid #005eb8; border-radius: 12px; padding: 20px; margin-top: 30px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.05);
@@ -62,39 +60,25 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- Medical Logic: Priority Sorting for Steps ---
-# To ensure branching works, we force a strict chronological order regardless of JSON key order
-def get_step_weight(item):
-    k, v = list(item.items())[0]
-    kv_str = f"{k} {v}".lower()
-    if "clock" in kv_str: return 0
-    if "dcc" in kv_str or "plastic" in kv_str: return 1
-    if "breathing" in k: return 2
-    if ">100" in v: return 3
-    if "ppv" in kv_str and "spontaneous" not in kv_str: return 4 # For <32 weeks initial PPV
-    if "open_airway" in v: return 5
-    if "apnoea" in k or "gasping" in k: return 6
-    if "5 inflations" in v or "25 cm" in v or "30 cm" in v: return 7
-    if "reasessment_after_5" in v: return 8
-    if "no_increase" in v: return 9
-    if "chest movements assessment" in v: return 10
-    if "normal_chest" in k: return 11
-    if "no_chest" in k: return 12
-    if "increase pressure" in v: return 13
-    if "repeat 5" in v: return 14
-    if "increase_in_heart" in v: return 15
-    if "continue ppv" in v: return 16
-    if "reasessment_after_30" in v: return 17
-    if "no_improvment" in k: return 18
-    if "compression" in v: return 19
-    if "epinephrine" in v: return 20
-    if "pneumothorax" in v or "hypovolemia" in v: return 21
-    if "spo2" in k: return 99
-    if "baby care" in v: return 98
-    return 50
+# --- Data Normalizer (Fixes only the Breathing/HR order discrepancy without deleting data) ---
+def normalize_path(path):
+    meta = []
+    core = []
+    for s in path:
+        if "Gestational_age" in s or "target_spo2" in s:
+            meta.append(s)
+        else:
+            core.append(s)
 
-def sort_path_medically(path):
-    return sorted(path, key=get_step_weight)
+    # Find indices to fix the specific swap issue in your JSON
+    breath_idx = next((i for i, s in enumerate(core) if "Breathing" in s), None)
+    hr_idx = next((i for i, s in enumerate(core) if "heart_rate" in s), None)
+
+    # If heart_rate comes right before Breathing, swap them so paths align perfectly
+    if breath_idx is not None and hr_idx is not None and hr_idx == breath_idx - 1:
+        core[hr_idx], core[breath_idx] = core[breath_idx], core[hr_idx]
+
+    return meta + core
 
 # --- Load Data ---
 @st.cache_data
@@ -107,11 +91,12 @@ def load_data():
 data = load_data()
 
 if data:
+    # Group and Normalize
     ga_groups = {"<32_weeks": [], ">32_weeks": []}
     for path in data:
         ga = path[0].get("Gestational_age", "Unknown")
         if ga in ga_groups:
-            ga_groups[ga].append(sort_path_medically(path)) # Sort upon loading
+            ga_groups[ga].append(normalize_path(path))
 
     # --- UI Header ---
     st.markdown("""
@@ -145,7 +130,7 @@ if data:
     spo2_target = next((step["target_spo2_Right_hand"] for path in ga_groups[selected_ga] for step in path if "target_spo2_Right_hand" in step), None)
 
     # --- Helper to render a single step card ---
-    def render_step(step, delay=0):
+    def render_step(step):
         key, value = list(step.items())[0]
         if key in ["Gestational_age", "target_spo2_Right_hand"]: return
         
@@ -163,7 +148,7 @@ if data:
 
         formatted_value = str(value).replace('_', ' ').replace(' cm h2o', ' cmH₂O').replace(' o2', ' O₂')
         st.markdown(f"""
-        <div class="{card_class}" style="animation-delay: {delay}s">
+        <div class="{card_class}">
             <div class="step-key">{icon} {key.replace('_', ' ')}</div>
             <div class="step-value">{formatted_value}</div>
         </div>
@@ -177,11 +162,10 @@ if data:
 
     # 1. Display the common steps up to the current depth
     for i in range(depth):
-        if i < len(active[0]): # Safe check
-            render_step(active[0][i], delay=i*0.1)
+        if i < len(active[0]):
+            render_step(active[0][i])
 
     # 2. Check for divergence (Branching point)
-    # Get steps at current depth for paths that haven't ended yet
     valid_paths = [p for p in active if depth < len(p)]
     
     if valid_paths:
@@ -193,45 +177,28 @@ if data:
             st.markdown("""
             <div class="branch-container">
                 <div class="branch-title">⚕️ Clinical Assessment Required</div>
-                <div class="btn-container">
             """, unsafe_allow_html=True)
             
             cols = st.columns(len(unique_steps))
             for i, step_tuple in enumerate(unique_steps):
                 step_dict = dict(step_tuple)
                 key, value = list(step_dict.items())[0]
-                btn_text = str(value).replace('_', ' ').replace(' cm h2o', ' cmH₂O')
+                btn_text = str(value).replace('_', ' ').replace(' cm h2o', ' cmH₂O').replace(' o2', ' O₂')
                 
                 with cols[i]:
-                    # Determine button color based on context
                     btn_type = "primary"
                     if "No_" in key or "No_" in value: btn_type = "secondary"
-                    if "Normal" in key or "increase" in value or "improvment" in value.lower(): btn_type = "primary"
+                    if "Normal" in key or "increase" in value or "improvment" in value.lower() or "baby care" in value.lower(): btn_type = "primary"
                     
                     if st.button(btn_text, key=f"btn_{depth}_{i}", use_container_width=True, type=btn_type):
-                        # Filter paths to keep only those matching this choice
                         st.session_state.active_paths = [p for p in valid_paths if tuple(sorted(p[depth].items())) == step_tuple]
                         st.session_state.depth += 1
                         st.rerun()
             
-            st.markdown("</div></div>", unsafe_allow_html=True)
-            
-            # Handle paths that ended before this branch (Implicit Success)
-            ended_paths = [p for p in active if depth >= len(p)]
-            if ended_paths:
-                with st.expander("✅ Or did the baby improve spontaneously?"):
-                    if st.button("Yes, Baby is Stable", key=f"btn_ended_{depth}", use_container_width=True, type="primary"):
-                        st.session_state.active_paths = ended_paths
-                        st.session_state.depth = 999 # Push to end
-                        st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
     # 3. If no divergence, check if we reached the end
     else:
-        # We reached the end of the active paths
-        last_path = active[0]
-        if "improvment" not in str(last_path[-2].keys()).lower() and "baby care" not in str(last_path[-2].values()).lower():
-            render_step(last_path[-1])
-        
         st.markdown("""
         <div class="step-card success-card" style="margin-top: 30px; text-align: center;">
             <div class="step-key">🏁 END OF PATHWAY</div>

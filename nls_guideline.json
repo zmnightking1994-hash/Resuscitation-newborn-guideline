@@ -179,7 +179,7 @@
             "id": "lt32_good",
             "condition": "Spontaneous breathing + HR > 100 bpm",
             "icon": "✅",
-            "action": "دعم التنفس ب PPV: PEEP 6 cmH₂O / FiO₂ ≥30%",
+            "action": "مراقبة",
             "outcome": "routine_care",
             "outcome_label": "Baby Care (Routine)"
           },
@@ -190,7 +190,7 @@
             "steps": [
               {
                 "id": "lt32_s1",
-                "action": "Open Airway",
+                "action": "Open Airway+PPV: PEEP 6 cmH₂O / FiO₂ ≥30%",
                 "type": "action"
               },
               {
